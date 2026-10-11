@@ -23,12 +23,21 @@ from backend.services.loader import execute_query
 # Load environment variables
 load_dotenv()
 
-GROQ_API_KEY = os.getenv("GROQ_API_KEY", "")
-GEMINI_API_KEY = os.getenv("GEMINI_API_KEY", "")
-GROQ_MODEL = os.getenv("GROQ_MODEL", "llama-3.3-70b-versatile")
-GEMINI_MODEL = os.getenv("GEMINI_MODEL", "gemini-1.5-flash")
-
 MAX_RETRIES = 3
+
+def get_env_config():
+    # Reload from .env in backend directory or root
+    env_path = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), ".env")
+    if os.path.exists(env_path):
+        load_dotenv(dotenv_path=env_path, override=True)
+    else:
+        load_dotenv(override=True)
+    return {
+        "GROQ_API_KEY": os.getenv("GROQ_API_KEY", "").strip(),
+        "GEMINI_API_KEY": os.getenv("GEMINI_API_KEY", "").strip(),
+        "GROQ_MODEL": os.getenv("GROQ_MODEL", "llama-3.3-70b-versatile").strip(),
+        "GEMINI_MODEL": os.getenv("GEMINI_MODEL", "gemini-1.5-flash").strip()
+    }
 
 
 def format_schema_for_prompt(table_name: str, schema: List[Dict[str, Any]]) -> str:
@@ -43,16 +52,18 @@ def format_schema_for_prompt(table_name: str, schema: List[Dict[str, Any]]) -> s
 
 def _call_groq(messages: List[Dict[str, str]], temperature: float = 0.1) -> str:
     """Invokes the Groq API using HTTP client."""
-    if not GROQ_API_KEY or "your_groq" in GROQ_API_KEY:
-        raise ValueError("GROQ_API_KEY is not configured in .env")
+    config = get_env_config()
+    api_key = config["GROQ_API_KEY"]
+    if not api_key or "your_groq" in api_key.lower():
+        raise ValueError("GROQ_API_KEY is not configured in .env (currently placeholder or empty)")
 
     url = "https://api.groq.com/openai/v1/chat/completions"
     headers = {
-        "Authorization": f"Bearer {GROQ_API_KEY}",
+        "Authorization": f"Bearer {api_key}",
         "Content-Type": "application/json"
     }
     payload = {
-        "model": GROQ_MODEL,
+        "model": config["GROQ_MODEL"],
         "messages": messages,
         "temperature": temperature,
         "max_tokens": 1024
@@ -67,8 +78,10 @@ def _call_groq(messages: List[Dict[str, str]], temperature: float = 0.1) -> str:
 
 def _call_gemini(messages: List[Dict[str, str]], temperature: float = 0.1) -> str:
     """Invokes Google Gemini API as fallback."""
-    if not GEMINI_API_KEY or "your_gemini" in GEMINI_API_KEY:
-        raise ValueError("GEMINI_API_KEY is not configured in .env")
+    config = get_env_config()
+    api_key = config["GEMINI_API_KEY"]
+    if not api_key or "your_gemini" in api_key.lower():
+        raise ValueError("GEMINI_API_KEY is not configured in .env (currently placeholder or empty)")
 
     # Format OpenAI style messages to Gemini contents format
     gemini_contents = []
@@ -82,7 +95,7 @@ def _call_gemini(messages: List[Dict[str, str]], temperature: float = 0.1) -> st
         elif msg["role"] == "assistant":
             gemini_contents.append({"role": "model", "parts": [{"text": msg["content"]}]})
 
-    url = f"https://generativelanguage.googleapis.com/v1beta/models/{GEMINI_MODEL}:generateContent?key={GEMINI_API_KEY}"
+    url = f"https://generativelanguage.googleapis.com/v1beta/models/{config['GEMINI_MODEL']}:generateContent?key={api_key}"
     payload: Dict[str, Any] = {
         "contents": gemini_contents,
         "generationConfig": {"temperature": temperature, "maxOutputTokens": 1024}
