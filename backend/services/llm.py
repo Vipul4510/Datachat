@@ -113,20 +113,34 @@ def _call_gemini(messages: List[Dict[str, str]], temperature: float = 0.1) -> st
         raise RuntimeError("Gemini returned empty candidate response")
 
 
+class LLMConfigurationError(Exception):
+    """Raised when no valid LLM API key is configured."""
+    pass
+
+
 def call_llm(messages: List[Dict[str, str]], temperature: float = 0.1) -> str:
     """Calls Groq API with fallback to Gemini API."""
     errors = []
+    config = get_env_config()
+    has_groq = bool(config["GROQ_API_KEY"]) and "your_groq" not in config["GROQ_API_KEY"].lower()
+    has_gemini = bool(config["GEMINI_API_KEY"]) and "your_gemini" not in config["GEMINI_API_KEY"].lower()
+
+    if not has_groq and not has_gemini:
+        raise LLMConfigurationError("No valid API key found. Add GROQ_API_KEY or GEMINI_API_KEY to backend/.env")
+
     # Primary: Groq
-    try:
-        return _call_groq(messages, temperature=temperature)
-    except Exception as e:
-        errors.append(f"Groq failed: {str(e)}")
+    if has_groq:
+        try:
+            return _call_groq(messages, temperature=temperature)
+        except Exception as e:
+            errors.append(f"Groq ({config['GROQ_MODEL']}) failed: {str(e)}")
 
     # Fallback: Gemini
-    try:
-        return _call_gemini(messages, temperature=temperature)
-    except Exception as e:
-        errors.append(f"Gemini failed: {str(e)}")
+    if has_gemini:
+        try:
+            return _call_gemini(messages, temperature=temperature)
+        except Exception as e:
+            errors.append(f"Gemini ({config['GEMINI_MODEL']}) failed: {str(e)}")
 
     raise RuntimeError(f"All LLM providers failed: {'; '.join(errors)}")
 
@@ -291,14 +305,43 @@ def run_nl_query_with_self_correction(
     for attempt in range(MAX_RETRIES + 1):
         try:
             # Step 1: Generate SQL (with previous error if retrying)
-            sql = generate_sql(
-                table_name=table_name,
-                schema=schema,
-                question=question,
-                chat_history=chat_history,
-                previous_attempt=last_sql if attempt > 0 else None,
-                error_message=last_error if attempt > 0 else None
-            )
+            try:
+                sql = generate_sql(
+                    table_name=table_name,
+                    schema=schema,
+                    question=question,
+                    chat_history=chat_history,
+                    previous_attempt=last_sql if attempt > 0 else None,
+                    error_message=last_error if attempt > 0 else None
+                )
+            except LLMConfigurationError as e:
+                # Return immediately without retrying or blaming DuckDB
+                return {
+                    "success": False,
+                    "sql": "",
+                    "error": str(e),
+                    "retries": 0,
+                    "columns": [],
+                    "rows": [],
+                    "row_count": 0,
+                    "summary": f"Configuration Required: {str(e)}"
+                }
+            except Exception as e:
+                # If all LLM providers failed, don't wrap as DuckDB error and don't retry indefinitely
+                err_str = str(e)
+                if "All LLM providers failed" in err_str:
+                    return {
+                        "success": False,
+                        "sql": "",
+                        "error": err_str,
+                        "retries": 0,
+                        "columns": [],
+                        "rows": [],
+                        "row_count": 0,
+                        "summary": f"LLM Service Error: {err_str}"
+                    }
+                raise
+
             last_sql = sql
 
             # Step 2: Validate SQL Safety Guard
