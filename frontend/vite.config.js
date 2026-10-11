@@ -10,6 +10,12 @@ export default defineConfig({
   ],
   server: {
     port: 5173,
-    host: true
+    host: true,
+    proxy: {
+      '/upload': 'http://localhost:8000',
+      '/ask': 'http://localhost:8000',
+      '/report': 'http://localhost:8000',
+      '/health': 'http://localhost:8000'
+    }
   }
 })
