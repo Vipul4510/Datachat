@@ -1,0 +1,146 @@
+[
+  {
+    "id": 1,
+    "dataset": "sales_data.csv",
+    "question": "What is the total number of orders in the dataset?",
+    "expected_sql_keywords": ["COUNT"],
+    "expected_min_rows": 1
+  },
+  {
+    "id": 2,
+    "dataset": "sales_data.csv",
+    "question": "What is the total revenue across all sales?",
+    "expected_sql_keywords": ["SUM", "revenue"],
+    "expected_min_rows": 1
+  },
+  {
+    "id": 3,
+    "dataset": "sales_data.csv",
+    "question": "Show the total revenue by region sorted from highest to lowest",
+    "expected_sql_keywords": ["GROUP BY", "region", "ORDER BY", "DESC"],
+    "expected_min_rows": 3
+  },
+  {
+    "id": 4,
+    "dataset": "sales_data.csv",
+    "question": "Which product category has the highest average profit?",
+    "expected_sql_keywords": ["category", "AVG", "profit", "LIMIT"],
+    "expected_min_rows": 1
+  },
+  {
+    "id": 5,
+    "dataset": "sales_data.csv",
+    "question": "List the top 5 orders by revenue",
+    "expected_sql_keywords": ["ORDER BY", "revenue", "LIMIT 5"],
+    "expected_min_rows": 5
+  },
+  {
+    "id": 6,
+    "dataset": "sales_data.csv",
+    "question": "How many orders were placed in the Technology category?",
+    "expected_sql_keywords": ["COUNT", "Technology"],
+    "expected_min_rows": 1
+  },
+  {
+    "id": 7,
+    "dataset": "sales_data.csv",
+    "question": "What is the minimum, maximum, and average unit price?",
+    "expected_sql_keywords": ["MIN", "MAX", "AVG", "unit_price"],
+    "expected_min_rows": 1
+  },
+  {
+    "id": 8,
+    "dataset": "sales_data.csv",
+    "question": "Find all orders where profit is greater than 500",
+    "expected_sql_keywords": ["WHERE", "profit", ">"],
+    "expected_min_rows": 1
+  },
+  {
+    "id": 9,
+    "dataset": "sales_data.csv",
+    "question": "Show monthly revenue breakdown",
+    "expected_sql_keywords": ["GROUP BY", "revenue"],
+    "expected_min_rows": 1
+  },
+  {
+    "id": 10,
+    "dataset": "sales_data.csv",
+    "question": "Count the number of orders in each category",
+    "expected_sql_keywords": ["category", "COUNT", "GROUP BY"],
+    "expected_min_rows": 3
+  },
+  {
+    "id": 11,
+    "dataset": "expenses.json",
+    "question": "What is the total budget across all departments?",
+    "expected_sql_keywords": ["SUM", "budget"],
+    "expected_min_rows": 1
+  },
+  {
+    "id": 12,
+    "dataset": "expenses.json",
+    "question": "Which department had the highest actual spend?",
+    "expected_sql_keywords": ["department", "actual_spend", "ORDER BY", "DESC"],
+    "expected_min_rows": 1
+  },
+  {
+    "id": 13,
+    "dataset": "expenses.json",
+    "question": "Compare total budget and total actual spend by department",
+    "expected_sql_keywords": ["department", "SUM(budget)", "SUM(actual_spend)", "GROUP BY"],
+    "expected_min_rows": 5
+  },
+  {
+    "id": 14,
+    "dataset": "expenses.json",
+    "question": "Find all records where actual spend exceeded the budget",
+    "expected_sql_keywords": ["WHERE", "actual_spend", ">", "budget"],
+    "expected_min_rows": 0
+  },
+  {
+    "id": 15,
+    "dataset": "expenses.json",
+    "question": "What is the average budget for the Engineering department?",
+    "expected_sql_keywords": ["AVG(budget)", "Engineering"],
+    "expected_min_rows": 1
+  },
+  {
+    "id": 16,
+    "dataset": "student_marks.xlsx",
+    "question": "What is the average score for each subject?",
+    "sheet_name": "ExamScores",
+    "expected_sql_keywords": ["subject", "AVG", "score", "GROUP BY"],
+    "expected_min_rows": 4
+  },
+  {
+    "id": 17,
+    "dataset": "student_marks.xlsx",
+    "question": "Which student achieved the highest score in Math?",
+    "sheet_name": "ExamScores",
+    "expected_sql_keywords": ["student_id", "Math", "ORDER BY", "score", "DESC"],
+    "expected_min_rows": 1
+  },
+  {
+    "id": 18,
+    "dataset": "student_marks.xlsx",
+    "question": "How many students scored above 80 in Physics?",
+    "sheet_name": "ExamScores",
+    "expected_sql_keywords": ["COUNT", "Physics", "80"],
+    "expected_min_rows": 1
+  },
+  {
+    "id": 19,
+    "dataset": "student_marks.xlsx",
+    "question": "List the top 3 highest scores in Chemistry",
+    "sheet_name": "ExamScores",
+    "expected_sql_keywords": ["Chemistry", "ORDER BY", "score", "DESC", "LIMIT 3"],
+    "expected_min_rows": 3
+  },
+  {
+    "id": 20,
+    "dataset": "sales_data.parquet",
+    "question": "What is the total units sold in the West region?",
+    "expected_sql_keywords": ["SUM", "units_sold", "West"],
+    "expected_min_rows": 1
+  }
+]
