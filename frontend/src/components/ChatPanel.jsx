@@ -24,6 +24,7 @@ export default function ChatPanel({
   suggestedQuestions = [],
   messages = [],
   onSendMessage,
+  onExport,
   onExportCleaned,
   onUndo,
   canUndo = false,
@@ -64,12 +65,24 @@ export default function ChatPanel({
   return (
     <div className="w-full flex flex-col bg-slate-900/50 border border-slate-800 rounded-2xl backdrop-blur-md overflow-hidden flex-1 min-h-[500px]">
       {/* Header */}
-      <div className="px-6 py-4 border-b border-slate-800/80 bg-slate-950/40 flex items-center justify-between">
+      <div className="px-6 py-4 border-b border-slate-800/80 bg-slate-950/40 flex flex-wrap items-center justify-between gap-3">
         <div className="flex items-center gap-2">
           <Sparkles className="w-4 h-4 text-cyan-400" />
           <h3 className="text-sm font-semibold text-white">Conversational Data & Cleaning Assistant</h3>
         </div>
-        <span className="text-xs text-slate-400 font-mono">In-Memory DuckDB Engine</span>
+        <div className="flex items-center gap-2">
+          {onExport && (
+            <button
+              onClick={() => onExport('pdf')}
+              className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-gradient-to-r from-rose-600/30 to-pink-600/30 hover:from-rose-600/40 hover:to-pink-600/40 text-rose-300 text-xs font-semibold border border-rose-500/40 transition shadow-sm active:scale-95"
+              title="Download conversation & quality report as PDF"
+            >
+              <FileText className="w-3.5 h-3.5 text-rose-400" />
+              <span>Download PDF Report</span>
+            </button>
+          )}
+          <span className="text-xs text-slate-400 font-mono hidden sm:inline">In-Memory DuckDB Engine</span>
+        </div>
       </div>
 
       {/* Suggested Questions & Quick Action Chips */}

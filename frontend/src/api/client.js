@@ -58,4 +58,29 @@ export const api = {
   getCleanedDataUrl: (tableId, format = 'xlsx') => {
     return `${API_BASE_URL}/export/cleaned/${tableId}?format=${format}`;
   },
+
+  getSamples: async () => {
+    const res = await client.get('/samples');
+    return res.data;
+  },
+
+  loadSample: async (filename) => {
+    const res = await client.post('/samples/load', { filename });
+    return res.data;
+  },
+
+  getVisualizations: async (tableId) => {
+    const res = await client.get(`/table/${tableId}/visualize`);
+    return res.data;
+  },
+
+  createCustomChart: async (tableId, config) => {
+    const res = await client.post(`/table/${tableId}/custom_chart`, config);
+    return res.data;
+  },
+
+  getPrivacyAudit: async (tableId) => {
+    const res = await client.get(`/table/${tableId}/privacy_audit`);
+    return res.data;
+  },
 };
