@@ -1,5 +1,22 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { Send, Bot, User, Code, ChevronDown, ChevronUp, Sparkles, AlertCircle, Loader2 } from 'lucide-react';
+import {
+  Send,
+  Bot,
+  User,
+  Code,
+  ChevronDown,
+  ChevronUp,
+  Sparkles,
+  AlertCircle,
+  Loader2,
+  Download,
+  FileSpreadsheet,
+  FileText,
+  CheckCircle2,
+  RotateCcw,
+  TrendingUp,
+  Table
+} from 'lucide-react';
 import ChartRenderer from './ChartRenderer';
 
 export default function ChatPanel({
@@ -7,6 +24,9 @@ export default function ChatPanel({
   suggestedQuestions = [],
   messages = [],
   onSendMessage,
+  onExportCleaned,
+  onUndo,
+  canUndo = false,
   isLoading,
 }) {
   const [input, setInput] = useState('');
@@ -47,19 +67,43 @@ export default function ChatPanel({
       <div className="px-6 py-4 border-b border-slate-800/80 bg-slate-950/40 flex items-center justify-between">
         <div className="flex items-center gap-2">
           <Sparkles className="w-4 h-4 text-cyan-400" />
-          <h3 className="text-sm font-semibold text-white">Conversational SQL Assistant</h3>
+          <h3 className="text-sm font-semibold text-white">Conversational Data & Cleaning Assistant</h3>
         </div>
         <span className="text-xs text-slate-400 font-mono">In-Memory DuckDB Engine</span>
       </div>
 
-      {/* Suggested Questions Chips (at top of conversation) */}
-      {suggestedQuestions && suggestedQuestions.length > 0 && messages.length === 0 && (
+      {/* Suggested Questions & Quick Action Chips */}
+      {messages.length === 0 && (
         <div className="p-6 bg-slate-950/30 border-b border-slate-800/60">
           <p className="text-xs font-semibold text-slate-400 uppercase tracking-wider mb-3">
-            Suggested starter queries:
+            Suggested starter queries & cleaning actions:
           </p>
           <div className="flex flex-wrap gap-2">
-            {suggestedQuestions.map((q, idx) => (
+            {/* Quick cleaning chips */}
+            <button
+              onClick={() => handleChipClick('Auto clean the dataset to maximize data health score')}
+              disabled={isLoading}
+              className="text-xs text-left px-3.5 py-2 rounded-xl bg-gradient-to-r from-cyan-950/70 to-blue-950/70 hover:from-cyan-900/70 hover:to-blue-900/70 text-cyan-300 border border-cyan-700/60 transition shadow-sm font-medium flex items-center gap-1.5"
+            >
+              <Sparkles className="w-3.5 h-3.5 text-cyan-400" />
+              ⚡ Auto-clean dataset
+            </button>
+            <button
+              onClick={() => handleChipClick('Remove all duplicate rows')}
+              disabled={isLoading}
+              className="text-xs text-left px-3.5 py-2 rounded-xl bg-slate-800/70 hover:bg-slate-700 text-slate-300 border border-slate-700/60 transition shadow-sm"
+            >
+              🧹 Remove duplicates
+            </button>
+            <button
+              onClick={() => handleChipClick('Fill missing values with column medians')}
+              disabled={isLoading}
+              className="text-xs text-left px-3.5 py-2 rounded-xl bg-slate-800/70 hover:bg-slate-700 text-slate-300 border border-slate-700/60 transition shadow-sm"
+            >
+              🩹 Fill missing values
+            </button>
+
+            {suggestedQuestions && suggestedQuestions.map((q, idx) => (
               <button
                 key={idx}
                 onClick={() => handleChipClick(q)}
@@ -78,9 +122,9 @@ export default function ChatPanel({
         {messages.length === 0 && (
           <div className="h-48 flex flex-col items-center justify-center text-center text-slate-500">
             <Bot className="w-10 h-10 mb-2 text-slate-600" />
-            <p className="text-sm">Ask any question in plain English about your dataset.</p>
+            <p className="text-sm">Ask any question or tell me how to clean your dataset.</p>
             <p className="text-xs text-slate-600 mt-1">
-              "What is the average profit by category?" or "Show top 5 sales"
+              "Clean all duplicates", "Impute missing values in Region", or "Show average sales by category"
             </p>
           </div>
         )}
@@ -105,7 +149,87 @@ export default function ChatPanel({
 
               <div className="max-w-3xl w-full bg-slate-950/70 border border-slate-800/90 text-slate-200 rounded-2xl rounded-tl-sm p-4 text-sm shadow-md space-y-3">
                 {/* Conversational summary answer */}
-                <p className="leading-relaxed text-slate-100">{msg.summary}</p>
+                <div className="leading-relaxed text-slate-100 whitespace-pre-line">
+                  {msg.summary}
+                </div>
+
+                {/* If this is a data cleaning result, display rich action card */}
+                {msg.is_cleaning && msg.cleaning_details && (
+                  <div className="p-4 rounded-xl bg-emerald-950/20 border border-emerald-800/40 space-y-3">
+                    <div className="flex flex-wrap items-center justify-between gap-2 border-b border-emerald-900/40 pb-2">
+                      <div className="flex items-center gap-2">
+                        <CheckCircle2 className="w-4 h-4 text-emerald-400" />
+                        <span className="font-semibold text-xs text-emerald-300">
+                          Data Health Transformation
+                        </span>
+                      </div>
+                      <div className="flex items-center gap-1.5 text-xs font-bold">
+                        <span className="text-slate-400">{msg.cleaning_details.initial_health_score}</span>
+                        <span className="text-slate-500">➔</span>
+                        <span className="text-emerald-400 text-sm">{msg.cleaning_details.final_health_score}/100</span>
+                        {msg.cleaning_details.score_improvement > 0 && (
+                          <span className="text-xs px-1.5 py-0.5 rounded bg-emerald-950 text-emerald-300 border border-emerald-700/60">
+                            +{msg.cleaning_details.score_improvement} pts
+                          </span>
+                        )}
+                      </div>
+                    </div>
+
+                    <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 text-xs">
+                      <div className="p-2 rounded bg-slate-900/60 border border-slate-800">
+                        <span className="text-slate-400 block text-[10px]">Dataset Rows</span>
+                        <span className="font-semibold text-white">
+                          {msg.cleaning_details.rows_before} ➔ {msg.cleaning_details.rows_after}
+                        </span>
+                      </div>
+                      <div className="p-2 rounded bg-slate-900/60 border border-slate-800">
+                        <span className="text-slate-400 block text-[10px]">Duplicates Left</span>
+                        <span className="font-semibold text-white">
+                          {msg.cleaning_details.duplicate_rows_remaining}
+                        </span>
+                      </div>
+                      <div className="p-2 rounded bg-slate-900/60 border border-slate-800">
+                        <span className="text-slate-400 block text-[10px]">Missing Cells Left</span>
+                        <span className="font-semibold text-white">
+                          {msg.cleaning_details.missing_cells_remaining}
+                        </span>
+                      </div>
+                      <div className="p-2 rounded bg-slate-900/60 border border-slate-800">
+                        <span className="text-slate-400 block text-[10px]">Outliers Left</span>
+                        <span className="font-semibold text-white">
+                          {msg.cleaning_details.outliers_remaining}
+                        </span>
+                      </div>
+                    </div>
+
+                    {/* Download Cleaned Data File Buttons */}
+                    <div className="flex flex-wrap items-center gap-2 pt-1">
+                      <button
+                        onClick={() => onExportCleaned && onExportCleaned('xlsx')}
+                        className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-semibold shadow-sm transition"
+                      >
+                        <FileSpreadsheet className="w-3.5 h-3.5" />
+                        Download Cleaned Excel (.xlsx)
+                      </button>
+                      <button
+                        onClick={() => onExportCleaned && onExportCleaned('csv')}
+                        className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-medium border border-slate-700 transition"
+                      >
+                        <FileText className="w-3.5 h-3.5 text-cyan-400" />
+                        Download Cleaned CSV
+                      </button>
+                      {canUndo && (
+                        <button
+                          onClick={() => onUndo && onUndo()}
+                          className="flex items-center gap-1 px-2.5 py-1.5 rounded-lg bg-rose-950/40 hover:bg-rose-900/40 text-rose-300 text-xs font-medium border border-rose-800/60 transition ml-auto"
+                        >
+                          <RotateCcw className="w-3 h-3 text-rose-400" />
+                          Undo Clean
+                        </button>
+                      )}
+                    </div>
+                  </div>
+                )}
 
                 {/* View SQL Expander */}
                 {msg.sql && (
@@ -133,37 +257,43 @@ export default function ChatPanel({
                 )}
 
                 {/* Chart visualization */}
-                {msg.chart && msg.chart.type !== 'none' && (
+                {msg.chart && msg.chart.type && !['none', 'table'].includes(msg.chart.type) && (
                   <ChartRenderer chart={msg.chart} />
                 )}
 
                 {/* Results Table */}
-                {msg.columns && msg.columns.length > 0 && msg.rows && (
-                  <div className="mt-3">
-                    <div className="text-[11px] text-slate-400 font-mono mb-1.5 flex items-center justify-between">
-                      <span>Result Data ({msg.row_count} rows)</span>
+                {msg.columns && msg.columns.length > 0 && msg.rows && msg.rows.length > 0 && (
+                  <div className="mt-3 bg-slate-900/60 border border-slate-800 rounded-xl overflow-hidden shadow-sm">
+                    <div className="px-3.5 py-2.5 bg-slate-950/70 border-b border-slate-800/80 flex items-center justify-between text-xs">
+                      <div className="flex items-center gap-2">
+                        <Table className="w-3.5 h-3.5 text-cyan-400" />
+                        <span className="font-semibold text-slate-200">Tabular Results</span>
+                        <span className="text-[10px] px-2 py-0.5 rounded-full bg-cyan-950/80 text-cyan-400 border border-cyan-800/60 font-mono">
+                          {msg.row_count || msg.rows.length} {((msg.row_count || msg.rows.length) === 1) ? 'row' : 'rows'}
+                        </span>
+                      </div>
                       {msg.retries > 0 && (
-                        <span className="text-amber-400 text-[10px]">
-                          Auto-corrected ({msg.retries} retries)
+                        <span className="text-amber-400 text-[10px] font-mono">
+                          Auto-corrected ({msg.retries} {msg.retries === 1 ? 'retry' : 'retries'})
                         </span>
                       )}
                     </div>
-                    <div className="overflow-x-auto rounded-xl border border-slate-800/90 max-h-64">
+                    <div className="overflow-x-auto max-h-72">
                       <table className="min-w-full divide-y divide-slate-800 text-left text-xs">
-                        <thead className="bg-slate-900 text-slate-300 sticky top-0">
+                        <thead className="bg-slate-900/90 text-slate-300 sticky top-0 backdrop-blur-sm z-10">
                           <tr>
                             {msg.columns.map((col) => (
-                              <th key={col} className="px-3 py-2 font-medium">
+                              <th key={col} className="px-3.5 py-2 font-medium tracking-wide text-slate-300">
                                 {col}
                               </th>
                             ))}
                           </tr>
                         </thead>
-                        <tbody className="divide-y divide-slate-800/60 bg-slate-950/40 text-slate-300 font-mono">
+                        <tbody className="divide-y divide-slate-800/60 bg-slate-950/30 text-slate-300 font-mono">
                           {msg.rows.map((row, rIdx) => (
-                            <tr key={rIdx} className="hover:bg-slate-800/30">
+                            <tr key={rIdx} className="hover:bg-slate-800/40 transition">
                               {row.map((val, cIdx) => (
-                                <td key={cIdx} className="px-3 py-1.5 whitespace-nowrap">
+                                <td key={cIdx} className="px-3.5 py-2 whitespace-nowrap">
                                   {val === null || val === undefined ? (
                                     <span className="text-slate-600 italic">null</span>
                                   ) : (

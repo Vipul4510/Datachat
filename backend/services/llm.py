@@ -62,18 +62,35 @@ def _call_groq(messages: List[Dict[str, str]], temperature: float = 0.1) -> str:
         "Authorization": f"Bearer {api_key}",
         "Content-Type": "application/json"
     }
-    payload = {
-        "model": config["GROQ_MODEL"],
-        "messages": messages,
-        "temperature": temperature,
-        "max_tokens": 1024
-    }
+    models_to_try = [config.get("GROQ_MODEL", "openai/gpt-oss-120b"), "openai/gpt-oss-120b", "qwen/qwen3.8-27b", "openai/gpt-oss-20b"]
+    seen = set()
+    models_to_try = [m for m in models_to_try if m and not (m in seen or seen.add(m))]
 
-    with httpx.Client(timeout=30.0) as client:
-        resp = client.post(url, headers=headers, json=payload)
-        resp.raise_for_status()
-        data = resp.json()
-        return data["choices"][0]["message"]["content"]
+    last_err = ""
+    for model_name in models_to_try:
+        payload = {
+            "model": model_name,
+            "messages": messages,
+            "temperature": temperature,
+            "max_tokens": 1024
+        }
+        with httpx.Client(timeout=30.0) as client:
+            resp = client.post(url, headers=headers, json=payload)
+            if resp.status_code == 200:
+                data = resp.json()
+                return data["choices"][0]["message"]["content"]
+            
+            try:
+                err_msg = resp.json().get("error", {}).get("message", resp.text)
+            except Exception:
+                err_msg = resp.text
+            last_err = f"{resp.status_code} - {err_msg}"
+            # If 404 or model not found, try next model in loop
+            if resp.status_code == 404 or "model" in err_msg.lower():
+                continue
+            raise RuntimeError(f"Groq API error ({model_name}): {last_err}")
+
+    raise RuntimeError(f"Groq API error: {last_err}")
 
 
 def _call_gemini(messages: List[Dict[str, str]], temperature: float = 0.1) -> str:
@@ -105,7 +122,12 @@ def _call_gemini(messages: List[Dict[str, str]], temperature: float = 0.1) -> st
 
     with httpx.Client(timeout=30.0) as client:
         resp = client.post(url, json=payload)
-        resp.raise_for_status()
+        if resp.status_code != 200:
+            try:
+                err_msg = resp.json().get("error", {}).get("message", resp.text)
+            except Exception:
+                err_msg = resp.text
+            raise RuntimeError(f"Gemini API error ({resp.status_code}): {err_msg}")
         data = resp.json()
         candidates = data.get("candidates", [])
         if candidates and "content" in candidates[0]:
@@ -298,6 +320,60 @@ def run_nl_query_with_self_correction(
     table_name = table_metadata["table_name"]
     schema = table_metadata["schema"]
 
+    # Conversational / General dialogue check
+    q_low = question.strip().lower().rstrip("!?.")
+    analytics_triggers = ["select", "count", "sum", "avg", "average", "total", "top", "highest", "lowest", "filter", "where", "group by", "order by", "rows", "records", "outlier", "clean", "drop", "null", "missing", "revenue", "profit", "sales", "price", "category", "region", "date", "margin", "trend", "breakdown", "orders"]
+    has_analytics_intent = any(trig in q_low for trig in analytics_triggers) or any(c["column_name"].lower() in q_low for c in schema)
+
+    conversational_triggers = ["hi", "hello", "hey", "help", "name", "who are you", "what are you", "what can you do", "explain yourself", "tell me about", "thank", "bye", "good morning", "good evening", "how are you"]
+    is_conversational = (not has_analytics_intent) or any(phrase in q_low for phrase in conversational_triggers)
+
+    if is_conversational and not any(kw in q_low for kw in ["top", "total", "sum", "count", "average", "avg", "show", "list", "where"]):
+        col_samples = [f'"{c["column_name"]}"' for c in schema[:5]]
+        try:
+            conv_messages = [
+                {
+                    "role": "system",
+                    "content": (
+                        "You are DataChat, a helpful, intelligent conversational AI analytics assistant powered by DuckDB. "
+                        "You talk naturally, warmly, and politely. "
+                        f"The user has an in-memory DuckDB dataset loaded with columns: {', '.join(col_samples)}. "
+                        "Respond conversationally in 2-3 sentences. If relevant, warmly mention you can analyze their dataset with SQL."
+                    )
+                },
+                {"role": "user", "content": question}
+            ]
+            ai_reply = call_llm(conv_messages, temperature=0.7)
+            return {
+                "success": True,
+                "sql": f"-- Conversational inquiry: {question}",
+                "error": None,
+                "retries": 0,
+                "columns": [],
+                "rows": [],
+                "row_count": 0,
+                "summary": ai_reply,
+                "is_conversational": True
+            }
+        except Exception:
+            # Fallback greeting if LLM is offline
+            return {
+                "success": True,
+                "sql": f"-- Conversational greeting: {question}",
+                "error": None,
+                "retries": 0,
+                "columns": [],
+                "rows": [],
+                "row_count": 0,
+                "summary": (
+                    f"👋 **Hello! I am DataChat.**\n\n"
+                    f"I am your conversational AI analytics assistant powered by **in-process DuckDB**.\n"
+                    f"Your active dataset has **{len(schema)} columns** ({', '.join(col_samples)}).\n\n"
+                    f"Ask me anything about your data, like *\"Show total revenue by region\"* or *\"Top 5 orders by revenue\"*!"
+                ),
+                "is_conversational": True
+            }
+
     last_sql = ""
     last_error = ""
     retries = 0
@@ -314,33 +390,40 @@ def run_nl_query_with_self_correction(
                     previous_attempt=last_sql if attempt > 0 else None,
                     error_message=last_error if attempt > 0 else None
                 )
-            except LLMConfigurationError as e:
-                # Return immediately without retrying or blaming DuckDB
+            except (LLMConfigurationError, Exception) as e:
+                err_str = str(e)
+                # Seamless fallback to Deterministic Offline Mode so user always gets an answer
+                try:
+                    from ai.fallback_provider import DeterministicFallbackProvider
+                    fallback = DeterministicFallbackProvider()
+                    fallback_sql, reason = fallback.synthesize_sql(question, table_name, schema)
+                    is_valid, guard_error, sanitized_sql = validate_sql(fallback_sql)
+                    if is_valid:
+                        cols, rows = execute_query(sanitized_sql)
+                        return {
+                            "success": True,
+                            "sql": sanitized_sql,
+                            "error": None,
+                            "retries": 0,
+                            "columns": cols,
+                            "rows": rows,
+                            "row_count": len(rows),
+                            "summary": f"**Deterministic Fallback Mode (Offline Analytics)**\n\n*(Note: Remote LLM was unavailable: {err_str[:90]}...)*\n\nFound **{len(rows)}** records. {reason}",
+                            "is_fallback": True
+                        }
+                except Exception:
+                    pass
+
                 return {
                     "success": False,
                     "sql": "",
-                    "error": str(e),
+                    "error": err_str,
                     "retries": 0,
                     "columns": [],
                     "rows": [],
                     "row_count": 0,
-                    "summary": f"Configuration Required: {str(e)}"
+                    "summary": f"LLM Service Error: {err_str}"
                 }
-            except Exception as e:
-                # If all LLM providers failed, don't wrap as DuckDB error and don't retry indefinitely
-                err_str = str(e)
-                if "All LLM providers failed" in err_str:
-                    return {
-                        "success": False,
-                        "sql": "",
-                        "error": err_str,
-                        "retries": 0,
-                        "columns": [],
-                        "rows": [],
-                        "row_count": 0,
-                        "summary": f"LLM Service Error: {err_str}"
-                    }
-                raise
 
             last_sql = sql
 

@@ -4,7 +4,8 @@ import { ResponsiveContainer, BarChart, Bar, LineChart, Line, PieChart, Pie, Cel
 const COLORS = ['#06b6d4', '#3b82f6', '#8b5cf6', '#ec4899', '#f59e0b', '#10b981', '#6366f1'];
 
 export default function ChartRenderer({ chart }) {
-  if (!chart || chart.type === 'none') return null;
+  if (!chart || chart.type === 'none' || chart.type === 'table') return null;
+  if (!['bar', 'line', 'pie', 'metric'].includes(chart.type)) return null;
 
   if (chart.type === 'metric') {
     return (

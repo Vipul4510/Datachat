@@ -10,6 +10,8 @@ export default function App() {
   const [reduceMotion, setReduceMotion] = useState(false);
   const [isUploading, setIsUploading] = useState(false);
   const [isAnswering, setIsAnswering] = useState(false);
+  const [isCleaning, setIsCleaning] = useState(false);
+  const [canUndo, setCanUndo] = useState(false);
   const [session, setSession] = useState(null); // { tableId, metadata, qualityReport, suggestedQuestions }
   const [chatMessages, setChatMessages] = useState([]);
   const [globalError, setGlobalError] = useState(null);
@@ -27,6 +29,7 @@ export default function App() {
         suggestedQuestions: data.suggested_questions,
       });
       setChatMessages([]);
+      setCanUndo(false);
     } catch (err) {
       const msg = err.response?.data?.detail || err.message || 'Upload failed.';
       setGlobalError(msg);
@@ -35,7 +38,7 @@ export default function App() {
     }
   };
 
-  // Handle asking a question
+  // Handle asking a question or conversational cleaning request
   const handleSendMessage = async (question) => {
     if (!session?.tableId) return;
     setIsAnswering(true);
@@ -49,6 +52,17 @@ export default function App() {
 
     try {
       const result = await api.askQuestion(session.tableId, question, historyPayload);
+
+      // If this query performed data cleaning, update the session and health score immediately
+      if (result.is_cleaning && result.quality_report) {
+        setSession((prev) => ({
+          ...prev,
+          qualityReport: result.quality_report,
+          metadata: result.metadata || prev.metadata,
+        }));
+        setCanUndo(Boolean(result.cleaning_details?.can_undo));
+      }
+
       const newEntry = {
         question,
         summary: result.summary,
@@ -59,6 +73,8 @@ export default function App() {
         chart: result.chart,
         retries: result.retries,
         error: result.error,
+        is_cleaning: result.is_cleaning,
+        cleaning_details: result.cleaning_details,
       };
       setChatMessages((prev) => [...prev, newEntry]);
     } catch (err) {
@@ -77,6 +93,66 @@ export default function App() {
     }
   };
 
+  // Handle direct data cleaning action
+  const handleClean = async (action, params = null) => {
+    if (!session?.tableId) return;
+    setIsCleaning(true);
+    setGlobalError(null);
+    try {
+      const result = await api.cleanData(session.tableId, action, params);
+      setSession((prev) => ({
+        ...prev,
+        qualityReport: result.quality_report,
+        metadata: result.metadata || prev.metadata,
+      }));
+      setCanUndo(Boolean(result.cleaning_details?.can_undo));
+
+      // Append assistant message in chat
+      const cleanEntry = {
+        question: `Clean data (${action.replace('_', ' ')})`,
+        summary: result.summary,
+        sql: `-- Applied data cleaning: ${action}`,
+        is_cleaning: true,
+        cleaning_details: result.cleaning_details,
+      };
+      setChatMessages((prev) => [...prev, cleanEntry]);
+    } catch (err) {
+      const msg = err.response?.data?.detail || err.message || 'Data cleaning failed.';
+      setGlobalError(msg);
+    } finally {
+      setIsCleaning(false);
+    }
+  };
+
+  // Handle undo cleaning
+  const handleUndo = async () => {
+    if (!session?.tableId) return;
+    setIsCleaning(true);
+    setGlobalError(null);
+    try {
+      const result = await api.undoClean(session.tableId);
+      setSession((prev) => ({
+        ...prev,
+        qualityReport: result.quality_report,
+        metadata: result.metadata || prev.metadata,
+      }));
+      setCanUndo(Boolean(result.can_undo));
+
+      // Append assistant message in chat
+      const undoEntry = {
+        question: 'Undo previous data cleaning',
+        summary: `↩️ ${result.message}\nData health score restored to ${result.quality_report.health_score}/100.`,
+        sql: '-- Reverted to previous snapshot',
+      };
+      setChatMessages((prev) => [...prev, undoEntry]);
+    } catch (err) {
+      const msg = err.response?.data?.detail || err.message || 'Undo operation failed.';
+      setGlobalError(msg);
+    } finally {
+      setIsCleaning(false);
+    }
+  };
+
   // Export report
   const handleExport = (format) => {
     if (!session?.tableId) return;
@@ -84,10 +160,18 @@ export default function App() {
     window.open(url, '_blank');
   };
 
+  // Export cleaned dataset file directly
+  const handleExportCleaned = (format = 'xlsx') => {
+    if (!session?.tableId) return;
+    const url = api.getCleanedDataUrl(session.tableId, format);
+    window.open(url, '_blank');
+  };
+
   // Reset to upload another file
   const handleReset = () => {
     setSession(null);
     setChatMessages([]);
+    setCanUndo(false);
     setGlobalError(null);
   };
 
@@ -178,6 +262,11 @@ export default function App() {
               report={session.qualityReport}
               metadata={session.metadata}
               onExport={handleExport}
+              onExportCleaned={handleExportCleaned}
+              onClean={handleClean}
+              onUndo={handleUndo}
+              canUndo={canUndo}
+              isCleaning={isCleaning}
             />
 
             {/* Chat Panel */}
@@ -186,7 +275,10 @@ export default function App() {
               suggestedQuestions={session.suggestedQuestions}
               messages={chatMessages}
               onSendMessage={handleSendMessage}
-              isLoading={isAnswering}
+              onExportCleaned={handleExportCleaned}
+              onUndo={handleUndo}
+              canUndo={canUndo}
+              isLoading={isAnswering || isCleaning}
             />
           </div>
         )}

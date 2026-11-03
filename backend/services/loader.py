@@ -197,3 +197,37 @@ def execute_query(query: str, params: Optional[list] = None) -> Tuple[List[str],
     columns = [col[0] for col in res.description] if res.description else []
     rows = res.fetchall()
     return columns, rows
+
+
+def update_table_metadata(table_id: str, new_metadata: Dict[str, Any]) -> None:
+    """Updates metadata for a registered table id."""
+    if table_id in _tables_registry:
+        _tables_registry[table_id].update(new_metadata)
+
+
+def update_table_from_df(table_id: str, df: pd.DataFrame) -> Dict[str, Any]:
+    """
+    Overwrites the existing in-process DuckDB table with a cleaned DataFrame,
+    updates registry schema & row count, and returns updated metadata.
+    """
+    meta = get_table_metadata(table_id)
+    if not meta:
+        raise ValueError(f"Table '{table_id}' not found in registry.")
+
+    table_name = meta["table_name"]
+    conn = get_connection()
+
+    conn.register("_temp_cleaned_df", df)
+    conn.execute(f"CREATE OR REPLACE TABLE \"{table_name}\" AS SELECT * FROM _temp_cleaned_df")
+    conn.unregister("_temp_cleaned_df")
+
+    new_schema = get_table_schema(table_name)
+    row_count = len(df)
+    col_count = len(df.columns)
+
+    meta["row_count"] = row_count
+    meta["column_count"] = col_count
+    meta["schema"] = new_schema
+    _tables_registry[table_id] = meta
+
+    return meta

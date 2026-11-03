@@ -1,10 +1,34 @@
 import React, { useState } from 'react';
-import { Database, AlertTriangle, Layers, Activity, Download, ChevronDown, ChevronUp, FileSpreadsheet, FileText } from 'lucide-react';
+import {
+  Database,
+  AlertTriangle,
+  Layers,
+  Activity,
+  Download,
+  ChevronDown,
+  ChevronUp,
+  FileSpreadsheet,
+  FileText,
+  Sparkles,
+  RotateCcw,
+  CheckCircle2,
+  Loader2
+} from 'lucide-react';
 import { ResponsiveContainer, BarChart, Bar, XAxis, YAxis, Tooltip, CartesianGrid } from 'recharts';
 
-export default function QualityDashboard({ report, metadata, onExport }) {
+export default function QualityDashboard({
+  report,
+  metadata,
+  onExport,
+  onExportCleaned,
+  onClean,
+  onUndo,
+  canUndo = false,
+  isCleaning = false
+}) {
   const [showPreview, setShowPreview] = useState(false);
   const [showColumns, setShowColumns] = useState(false);
+  const [showExportCleanedDropdown, setShowExportCleanedDropdown] = useState(false);
 
   if (!report) return null;
 
@@ -39,6 +63,8 @@ export default function QualityDashboard({ report, metadata, onExport }) {
       missingPct: c.null_percentage,
     }));
 
+  const hasIssues = duplicate_rows > 0 || missing_cells > 0 || total_iqr_outliers > 0;
+
   return (
     <div className="w-full bg-slate-900/60 border border-slate-800 rounded-2xl p-6 backdrop-blur-md mb-8">
       {/* Header bar */}
@@ -55,8 +81,46 @@ export default function QualityDashboard({ report, metadata, onExport }) {
           <h2 className="text-xl font-bold text-white mt-1">Data Quality & Health Overview</h2>
         </div>
 
-        {/* Export buttons */}
-        <div className="flex items-center gap-2">
+        {/* Action buttons (Cleaned export + Report exports) */}
+        <div className="flex flex-wrap items-center gap-2">
+          {/* Export Cleaned Data Dropdown */}
+          <div className="relative">
+            <button
+              onClick={() => setShowExportCleanedDropdown(!showExportCleanedDropdown)}
+              className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-emerald-600/20 hover:bg-emerald-600/30 text-emerald-300 text-xs font-semibold border border-emerald-500/40 transition shadow-sm"
+              title="Download the cleaned dataset"
+            >
+              <Download className="w-3.5 h-3.5 text-emerald-400" />
+              <span>Cleaned File</span>
+              <ChevronDown className="w-3 h-3 text-emerald-400" />
+            </button>
+
+            {showExportCleanedDropdown && (
+              <div className="absolute right-0 mt-1.5 w-48 rounded-xl bg-slate-900 border border-slate-700 shadow-xl z-50 py-1 text-xs">
+                <button
+                  onClick={() => {
+                    if (onExportCleaned) onExportCleaned('xlsx');
+                    setShowExportCleanedDropdown(false);
+                  }}
+                  className="w-full text-left px-3 py-2 hover:bg-slate-800 text-slate-200 flex items-center gap-2"
+                >
+                  <FileSpreadsheet className="w-3.5 h-3.5 text-emerald-400" />
+                  <span>Download Excel (.xlsx)</span>
+                </button>
+                <button
+                  onClick={() => {
+                    if (onExportCleaned) onExportCleaned('csv');
+                    setShowExportCleanedDropdown(false);
+                  }}
+                  className="w-full text-left px-3 py-2 hover:bg-slate-800 text-slate-200 flex items-center gap-2"
+                >
+                  <FileText className="w-3.5 h-3.5 text-cyan-400" />
+                  <span>Download CSV (.csv)</span>
+                </button>
+              </div>
+            )}
+          </div>
+
           <button
             onClick={() => onExport('xlsx')}
             className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-medium border border-slate-700 transition"
@@ -71,6 +135,83 @@ export default function QualityDashboard({ report, metadata, onExport }) {
             <FileText className="w-3.5 h-3.5 text-rose-400" />
             PDF Report
           </button>
+        </div>
+      </div>
+
+      {/* Quick Clean Interactive Action Bar */}
+      <div className="my-4 p-3.5 rounded-xl bg-slate-950/60 border border-slate-800 flex flex-wrap items-center justify-between gap-3">
+        <div className="flex items-center gap-2 text-xs">
+          <Sparkles className="w-4 h-4 text-cyan-400" />
+          <span className="font-semibold text-slate-200">Data Cleaning Assistant:</span>
+          {hasIssues ? (
+            <span className="text-slate-400">
+              Found {duplicate_rows > 0 ? `${duplicate_rows} duplicates, ` : ''}
+              {missing_cells > 0 ? `${missing_cells} null cells, ` : ''}
+              {total_iqr_outliers > 0 ? `${total_iqr_outliers} outliers` : ''}
+            </span>
+          ) : (
+            <span className="text-emerald-400 font-medium flex items-center gap-1">
+              <CheckCircle2 className="w-3.5 h-3.5" />
+              Dataset is completely cleaned!
+            </span>
+          )}
+        </div>
+
+        <div className="flex flex-wrap items-center gap-2">
+          {hasIssues && (
+            <>
+              <button
+                onClick={() => onClean && onClean('auto_clean')}
+                disabled={isCleaning}
+                className="flex items-center gap-1.5 px-3 py-1 rounded-lg bg-gradient-to-r from-cyan-600 to-blue-600 hover:from-cyan-500 hover:to-blue-500 text-white text-xs font-semibold shadow-sm transition disabled:opacity-50"
+              >
+                {isCleaning ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Sparkles className="w-3.5 h-3.5" />}
+                Auto-Clean All
+              </button>
+
+              {duplicate_rows > 0 && (
+                <button
+                  onClick={() => onClean && onClean('remove_duplicates')}
+                  disabled={isCleaning}
+                  className="px-2.5 py-1 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-medium border border-slate-700 transition disabled:opacity-50"
+                >
+                  Remove {duplicate_rows} Duplicates
+                </button>
+              )}
+
+              {missing_cells > 0 && (
+                <button
+                  onClick={() => onClean && onClean('fill_missing')}
+                  disabled={isCleaning}
+                  className="px-2.5 py-1 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-medium border border-slate-700 transition disabled:opacity-50"
+                >
+                  Fill {missing_cells} Missing
+                </button>
+              )}
+
+              {total_iqr_outliers > 0 && (
+                <button
+                  onClick={() => onClean && onClean('handle_outliers')}
+                  disabled={isCleaning}
+                  className="px-2.5 py-1 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-medium border border-slate-700 transition disabled:opacity-50"
+                >
+                  Handle Outliers
+                </button>
+              )}
+            </>
+          )}
+
+          {canUndo && (
+            <button
+              onClick={() => onUndo && onUndo()}
+              disabled={isCleaning}
+              className="flex items-center gap-1 px-2.5 py-1 rounded-lg bg-rose-950/40 hover:bg-rose-900/40 text-rose-300 text-xs font-medium border border-rose-800/60 transition disabled:opacity-50"
+              title="Undo last cleaning action"
+            >
+              <RotateCcw className="w-3 h-3 text-rose-400" />
+              Undo Clean
+            </button>
+          )}
         </div>
       </div>
 
@@ -140,7 +281,7 @@ export default function QualityDashboard({ report, metadata, onExport }) {
       </div>
 
       {/* Missing Values Chart (if any missing values exist) */}
-      {missingData.length > 0 && (
+      {missingData.length > 0 ? (
         <div className="mt-6 p-4 bg-slate-950/40 border border-slate-800/80 rounded-xl">
           <h4 className="text-xs uppercase font-semibold text-slate-400 tracking-wider mb-2">
             Missing Values by Column
@@ -158,6 +299,11 @@ export default function QualityDashboard({ report, metadata, onExport }) {
               </BarChart>
             </ResponsiveContainer>
           </div>
+        </div>
+      ) : (
+        <div className="mt-6 p-4 bg-slate-950/40 border border-emerald-900/40 rounded-xl flex items-center gap-3 text-xs text-emerald-400">
+          <CheckCircle2 className="w-4 h-4 text-emerald-400 flex-shrink-0" />
+          <span>Zero missing values detected! All columns in the dataset are fully populated.</span>
         </div>
       )}
 

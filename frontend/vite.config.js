@@ -15,7 +15,9 @@ export default defineConfig({
       '/upload': 'http://localhost:8000',
       '/ask': 'http://localhost:8000',
       '/report': 'http://localhost:8000',
-      '/health': 'http://localhost:8000'
+      '/health': 'http://localhost:8000',
+      '/clean': 'http://localhost:8000',
+      '/export': 'http://localhost:8000'
     }
   }
 })

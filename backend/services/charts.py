@@ -130,9 +130,9 @@ def suggest_chart(columns: List[str], rows: List[List[Any]]) -> Dict[str, Any]:
             "title": f"{num_cols[1]} comparison"
         }
 
-    # Default to table representation
+    # Default to none if no chart visualization is applicable
     return {
-        "type": "table",
+        "type": "none",
         "data": data,
         "title": "Tabular Results"
     }

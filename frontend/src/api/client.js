@@ -38,4 +38,24 @@ export const api = {
   getReportUrl: (tableId, format = 'xlsx') => {
     return `${API_BASE_URL}/report/${tableId}?format=${format}`;
   },
+
+  cleanData: async (tableId, action = 'auto_clean', params = null) => {
+    const res = await client.post('/clean', {
+      table_id: tableId,
+      action,
+      params,
+    });
+    return res.data;
+  },
+
+  undoClean: async (tableId) => {
+    const res = await client.post('/clean/undo', {
+      table_id: tableId,
+    });
+    return res.data;
+  },
+
+  getCleanedDataUrl: (tableId, format = 'xlsx') => {
+    return `${API_BASE_URL}/export/cleaned/${tableId}?format=${format}`;
+  },
 };
